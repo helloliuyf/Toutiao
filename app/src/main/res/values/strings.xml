@@ -37,6 +37,7 @@
     <string name="action_open_comment">查看评论</string>
     <string name="action_follow_media">关注此头条号</string>
     <string name="action_share">分享</string>
+    <string name="action_download">下载</string>
     <string name="action_open_in_browser">在浏览器中打开</string>
     <string name="action_copy_content">复制内容</string>
     <string name="action_unfollow_media">取消关注</string>
@@ -64,6 +65,8 @@
     <!-- Bottom Sheet List -->
     <string name="copy_content">复制内容</string>
     <string name="share_content">分享内容</string>
+    <string name="download_image">下载图片</string>
+    <string name="share_image">分享图片</string>
 
     <!-- Item Drag -->
     <string name="tip_drag">长按编辑,拖拽排序</string>

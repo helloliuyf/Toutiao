@@ -1,16 +1,23 @@
 package com.meiji.toutiao.module.news.content;
 
 import android.text.TextUtils;
+import android.util.Log;
+import android.webkit.JavascriptInterface;
 
 import com.meiji.toutiao.ErrorAction;
-import com.meiji.toutiao.RetrofitFactory;
+import com.meiji.toutiao.ImageBrowserActivity;
+import com.meiji.toutiao.InitApp;
 import com.meiji.toutiao.api.INewsApi;
 import com.meiji.toutiao.bean.news.MultiNewsArticleDataBean;
 import com.meiji.toutiao.bean.news.NewsContentBean;
+import com.meiji.toutiao.util.RetrofitFactory;
 import com.meiji.toutiao.util.SettingUtil;
 
+import java.util.ArrayList;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import io.reactivex.Observable;
-import io.reactivex.ObservableEmitter;
 import io.reactivex.ObservableOnSubscribe;
 import io.reactivex.ObservableSource;
 import io.reactivex.Observer;
@@ -19,8 +26,6 @@ import io.reactivex.annotations.NonNull;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Function;
 import io.reactivex.schedulers.Schedulers;
-import okhttp3.ResponseBody;
-import retrofit2.Response;
 
 /**
  * Created by Meiji on 2016/12/17.
@@ -29,9 +34,12 @@ import retrofit2.Response;
 class NewsContentPresenter implements INewsContent.Presenter {
 
     private static final String TAG = "NewsContentPresenter";
+    // 获取img标签正则
+    private static final String IMAGE_URL_REGEX = "<img[^>]+src\\s*=\\s*['\"]([^'\"]+)['\"][^>]*>";
     private INewsContent.View view;
     private String groupId;
     private String itemId;
+    private String html;
 
     NewsContentPresenter(INewsContent.View view) {
         this.view = view;
@@ -44,45 +52,39 @@ class NewsContentPresenter implements INewsContent.Presenter {
         final String url = dataBean.getDisplay_url();
 
         Observable
-                .create(new ObservableOnSubscribe<String>() {
-                    @Override
-                    public void subscribe(@NonNull ObservableEmitter<String> e) throws Exception {
-                        try {
-                            Response<ResponseBody> response = RetrofitFactory.getRetrofit().create(INewsApi.class)
-                                    .getNewsContentRedirectUrl(url).execute();
-                            // 获取重定向后的 URL 用于拼凑API
-                            if (response.isSuccessful()) {
-                                String httpUrl = response.raw().request().url().toString();
-                                if (!TextUtils.isEmpty(httpUrl) && httpUrl.contains("toutiao")) {
-                                    String api = httpUrl + "info/";
-                                    e.onNext(api);
-                                } else {
-                                    e.onError(new Throwable());
-                                }
-                            } else {
-                                e.onError(new Throwable());
-                            }
-                        } catch (Exception e1) {
-                            e.onComplete();
-                            ErrorAction.print(e1);
-                        }
-                    }
+                .create((ObservableOnSubscribe<String>) e -> {
+                    // https://toutiao.com/group/6530252650288513540/
+                    // https://m.toutiao.com/i6530252650288513540/info/
+                    String api = url.replace("www.", "")
+                            .replace("toutiao", "m.toutiao")
+                            .replace("group/", "i") + "info/";
+                    e.onNext(api);
+//                        try {
+//                            Response<ResponseBody> response = RetrofitFactory.getRetrofit().create(INewsApi.class)
+//                                    .getNewsContentRedirectUrl(url).execute();
+//                            // 获取重定向后的 URL 用于拼凑API
+//                            if (response.isSuccessful()) {
+//                                String httpUrl = response.raw().request().url().toString();
+//                                if (!TextUtils.isEmpty(httpUrl) && httpUrl.contains("toutiao")) {
+//                                    String api = httpUrl + "info/";
+//                                    e.onNext(api);
+//                                } else {
+//                                    e.onError(new Throwable());
+//                                }
+//                            } else {
+//                                e.onError(new Throwable());
+//                            }
+
+//                        } catch (Exception e1) {
+//                            e.onComplete();
+//                            ErrorAction.print(e1);
+//                        }
                 })
                 .subscribeOn(Schedulers.io())
-                .switchMap(new Function<String, ObservableSource<NewsContentBean>>() {
-                    @Override
-                    public ObservableSource<NewsContentBean> apply(@NonNull String s) throws Exception {
-                        return RetrofitFactory.getRetrofit().create(INewsApi.class).getNewsContent(s);
-                    }
-                })
-                .map(new Function<NewsContentBean, String>() {
-                    @Override
-                    public String apply(@NonNull NewsContentBean bean) throws Exception {
-                        return getHTML(bean);
-                    }
-                })
+                .switchMap((Function<String, ObservableSource<NewsContentBean>>) s -> RetrofitFactory.getRetrofit().create(INewsApi.class).getNewsContent(s))
+                .map(this::getHTML)
                 .observeOn(AndroidSchedulers.mainThread())
-                .compose(view.<String>bindToLife())
+                .as(view.bindAutoDispose())
                 .subscribe(new Observer<String>() {
                     @Override
                     public void onSubscribe(@NonNull Disposable d) {
@@ -117,7 +119,7 @@ class NewsContentPresenter implements INewsContent.Presenter {
                 css = css.replace("toutiao_light", "toutiao_dark");
             }
 
-            String html = "<!DOCTYPE html>\n" +
+            html = "<!DOCTYPE html>\n" +
                     "<html lang=\"en\">\n" +
                     "<head>\n" +
                     "    <meta charset=\"UTF-8\">" +
@@ -149,5 +151,39 @@ class NewsContentPresenter implements INewsContent.Presenter {
     public void doShowNetError() {
         view.onHideLoading();
         view.onShowNetError();
+    }
+
+    /**
+     * js 通信接口，定义供 JavaScript 调用的交互接口
+     * 点击图片启动新的 Activity，并传入点击图片对应的 url 和页面所有图片
+     * 对应的 url
+     *
+     * @param url 点击图片对应的 url
+     */
+    @JavascriptInterface
+    public void openImage(String url) {
+        if (!TextUtils.isEmpty(url)) {
+            ArrayList<String> list = getAllImageUrlFromHtml(html);
+            if (list.size() > 0) {
+                ImageBrowserActivity.start(InitApp.AppContext, url, list);
+                Log.d(TAG, "openImage: " + list.toString());
+            }
+        }
+    }
+
+    /***
+     * 获取页面所有图片对应的地址对象，
+     * 例如 <img src="http://sc1.hao123img.com/data/f44d0aab7bc35b8767de3c48706d429e" />
+     */
+    private ArrayList<String> getAllImageUrlFromHtml(String html) {
+        Matcher matcher = Pattern.compile(IMAGE_URL_REGEX).matcher(html);
+        ArrayList<String> imgUrlList = new ArrayList<>();
+        while (matcher.find()) {
+            int count = matcher.groupCount();
+            if (count >= 1) {
+                imgUrlList.add(matcher.group(1));
+            }
+        }
+        return imgUrlList;
     }
 }

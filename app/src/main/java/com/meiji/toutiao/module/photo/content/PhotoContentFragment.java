@@ -1,14 +1,11 @@
 package com.meiji.toutiao.module.photo.content;
 
-import android.Manifest;
 import android.annotation.SuppressLint;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.PorterDuff;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Parcelable;
-import android.support.annotation.NonNull;
 import android.support.design.widget.Snackbar;
 import android.support.v4.view.ViewPager;
 import android.support.v4.widget.ContentLoadingProgressBar;
@@ -41,18 +38,13 @@ import com.meiji.toutiao.module.news.comment.NewsCommentActivity;
 import com.meiji.toutiao.util.SettingUtil;
 import com.meiji.toutiao.widget.ViewPagerFixed;
 import com.r0adkll.slidr.model.SlidrInterface;
-
-import permissions.dispatcher.NeedsPermission;
-import permissions.dispatcher.OnNeverAskAgain;
-import permissions.dispatcher.OnPermissionDenied;
-import permissions.dispatcher.OnShowRationale;
-import permissions.dispatcher.PermissionRequest;
-import permissions.dispatcher.RuntimePermissions;
+import com.yanzhenjie.permission.AndPermission;
+import com.yanzhenjie.permission.Permission;
+import com.yanzhenjie.permission.SettingService;
 
 /**
  * Created by Meiji on 2017/3/1.
  */
-@RuntimePermissions
 public class PhotoContentFragment extends BaseFragment<IPhotoContent.Presenter> implements IPhotoContent.View, ViewPager.OnPageChangeListener, View.OnClickListener {
 
     public static final String TAG = "PhotoContentFragment";
@@ -109,12 +101,7 @@ public class PhotoContentFragment extends BaseFragment<IPhotoContent.Presenter> 
     protected void initView(View view) {
         Toolbar toolbar = view.findViewById(R.id.toolbar);
         initToolBar(toolbar, true, "");
-        toolbar.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                scrollView.smoothScrollTo(0, 0);
-            }
-        });
+        toolbar.setOnClickListener(v -> scrollView.smoothScrollTo(0, 0));
 
         tv_hint = view.findViewById(R.id.tv_hint);
         tv_save = view.findViewById(R.id.tv_save);
@@ -132,17 +119,9 @@ public class PhotoContentFragment extends BaseFragment<IPhotoContent.Presenter> 
 
         swipeRefreshLayout = view.findViewById(R.id.refresh_layout);
         swipeRefreshLayout.setColorSchemeColors(SettingUtil.getInstance().getColor());
-        swipeRefreshLayout.setOnRefreshListener(new SwipeRefreshLayout.OnRefreshListener() {
-            @Override
-            public void onRefresh() {
-                swipeRefreshLayout.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        swipeRefreshLayout.setRefreshing(true);
-                    }
-                });
-                presenter.doLoadData(shareUrl);
-            }
+        swipeRefreshLayout.setOnRefreshListener(() -> {
+            swipeRefreshLayout.post(() -> swipeRefreshLayout.setRefreshing(true));
+            presenter.doLoadData(shareUrl);
         });
 
         setHasOptionsMenu(true);
@@ -151,7 +130,7 @@ public class PhotoContentFragment extends BaseFragment<IPhotoContent.Presenter> 
     @Override
     public void onSetImageBrowser(PhotoGalleryBean bean, int position) {
         if (adapter == null) {
-            adapter = new PhotoContentAdapter(getActivity(), bean);
+            adapter = new PhotoContentAdapter(mContext, bean);
             viewPager.setAdapter(adapter);
             viewPager.setCurrentItem(position);
             viewPager.addOnPageChangeListener(this);
@@ -186,12 +165,7 @@ public class PhotoContentFragment extends BaseFragment<IPhotoContent.Presenter> 
     @Override
     public void onHideLoading() {
         progressBar.hide();
-        swipeRefreshLayout.post(new Runnable() {
-            @Override
-            public void run() {
-                swipeRefreshLayout.setRefreshing(false);
-            }
-        });
+        swipeRefreshLayout.post(() -> swipeRefreshLayout.setRefreshing(false));
     }
 
     @Override
@@ -291,15 +265,12 @@ public class PhotoContentFragment extends BaseFragment<IPhotoContent.Presenter> 
             }
         });
 
-        webView.setOnKeyListener(new View.OnKeyListener() {
-            @Override
-            public boolean onKey(View view, int i, KeyEvent keyEvent) {
-                if ((keyEvent.getKeyCode() == KeyEvent.KEYCODE_BACK) && webView.canGoBack()) {
-                    webView.goBack();
-                    return true;
-                }
-                return false;
+        webView.setOnKeyListener((view, i, keyEvent) -> {
+            if ((keyEvent.getKeyCode() == KeyEvent.KEYCODE_BACK) && webView.canGoBack()) {
+                webView.goBack();
+                return true;
             }
+            return false;
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
@@ -323,47 +294,26 @@ public class PhotoContentFragment extends BaseFragment<IPhotoContent.Presenter> 
     @Override
     public void onClick(View v) {
         if (v.getId() == R.id.tv_save) {
-            PhotoContentFragmentPermissionsDispatcher.onSaveImageWithCheck(this);
+            AndPermission.with(this)
+                    .permission(Permission.WRITE_EXTERNAL_STORAGE)
+                    .rationale((context, permissions, executor) -> new AlertDialog.Builder(context)
+                            .setMessage(R.string.permission_write_rationale)
+                            .setPositiveButton(R.string.button_allow, (dialog, which) -> executor.execute())
+                            .setNegativeButton(R.string.button_deny, (dialog, which) -> executor.cancel())
+                            .show())
+                    .onGranted(permissions -> presenter.doSaveImage())
+                    .onDenied(permissions -> {
+                        Snackbar.make(photoView, R.string.permission_write_denied, Snackbar.LENGTH_SHORT).show();
+                        if (AndPermission.hasAlwaysDeniedPermission(PhotoContentFragment.this, permissions)) {
+                            final SettingService settingService = AndPermission.permissionSetting(PhotoContentFragment.this);
+                            new AlertDialog.Builder(mContext)
+                                    .setMessage(R.string.permission_write_rationale)
+                                    .setPositiveButton(R.string.button_allow, (dialog, which) -> settingService.execute())
+                                    .setNegativeButton(R.string.button_deny, (dialog, which) -> settingService.cancel())
+                                    .show();
+                        }
+                    })
+                    .start();
         }
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        PhotoContentFragmentPermissionsDispatcher.onRequestPermissionsResult(this, requestCode, grantResults);
-    }
-
-    @NeedsPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-    void onSaveImage() {
-        presenter.doSaveImage();
-    }
-
-    @OnShowRationale(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-    void showRationale(final PermissionRequest request) {
-        new AlertDialog.Builder(getActivity())
-                .setMessage(R.string.permission_write_rationale)
-                .setPositiveButton(R.string.button_allow, new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        request.proceed();
-                    }
-                })
-                .setNegativeButton(R.string.button_deny, new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        request.cancel();
-                    }
-                })
-                .show();
-    }
-
-    @OnPermissionDenied(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-    void showDenied() {
-        Snackbar.make(photoView, R.string.permission_write_denied, Snackbar.LENGTH_SHORT).show();
-    }
-
-    @OnNeverAskAgain(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-    void showNeverAsk() {
-        Snackbar.make(photoView, R.string.permission_write_never_ask, Snackbar.LENGTH_SHORT).show();
     }
 }

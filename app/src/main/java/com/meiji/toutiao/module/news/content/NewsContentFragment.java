@@ -21,6 +21,7 @@ import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -57,6 +58,7 @@ public class NewsContentFragment extends BaseFragment<INewsContent.Presenter> im
     private String imgUrl;
     private boolean isHasImage;
     private MultiNewsArticleDataBean bean;
+    private Bundle mBundle;
 
     private Toolbar toolbar;
     private WebView webView;
@@ -79,17 +81,21 @@ public class NewsContentFragment extends BaseFragment<INewsContent.Presenter> im
 
     @Override
     protected int attachLayoutId() {
-        imgUrl = getArguments().getString(IMG);
+        mBundle = getArguments();
+        if (mBundle != null) {
+            imgUrl = mBundle.getString(IMG);
+        }
         isHasImage = !TextUtils.isEmpty(imgUrl);
         return isHasImage ? R.layout.fragment_news_content_img : R.layout.fragment_news_content;
     }
 
     @Override
     protected void initData() {
-        Bundle bundle = getArguments();
+        if (mBundle == null) {
+            return;
+        }
         try {
-            bean = bundle.getParcelable(TAG);
-//            Log.d(TAG, "initData: " + bean.toString());
+            bean = mBundle.getParcelable(TAG);
             presenter.doLoadData(bean);
             shareUrl = !TextUtils.isEmpty(bean.getShare_url()) ? bean.getShare_url() : bean.getDisplay_url();
             shareTitle = bean.getTitle();
@@ -101,17 +107,21 @@ public class NewsContentFragment extends BaseFragment<INewsContent.Presenter> im
         }
 
         if (isHasImage) {
-            ImageLoader.loadCenterCrop(getActivity(), bundle.getString(IMG), imageView, R.mipmap.error_image, R.mipmap.error_image);
+            ImageLoader.loadCenterCrop(getActivity(), mBundle.getString(IMG), imageView, R.mipmap.error_image, R.mipmap.error_image);
 
             appBarLayout.addOnOffsetChangedListener(new AppBarStateChangeListener() {
                 @Override
                 public void onStateChanged(AppBarLayout appBarLayout, AppBarStateChangeListener.State state) {
+                    Window window = null;
+                    if (getActivity() != null && getActivity().getWindow() != null) {
+                        window = getActivity().getWindow();
+                    }
                     if (state == State.EXPANDED) {
                         // 展开状态
                         collapsingToolbarLayout.setTitle("");
                         toolbar.setBackgroundColor(Color.TRANSPARENT);
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                            getActivity().getWindow().setFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS, WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT && window != null) {
+                            window.setFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS, WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
                         }
                     } else if (state == State.COLLAPSED) {
                         // 折叠状态
@@ -120,8 +130,8 @@ public class NewsContentFragment extends BaseFragment<INewsContent.Presenter> im
                         // 中间状态
                         collapsingToolbarLayout.setTitle(mediaName);
                         toolbar.setBackgroundColor(SettingUtil.getInstance().getColor());
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                            getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT && window != null) {
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
                         }
                     }
                 }
@@ -143,25 +153,17 @@ public class NewsContentFragment extends BaseFragment<INewsContent.Presenter> im
     protected void initView(View view) {
         toolbar = view.findViewById(R.id.toolbar);
         initToolBar(toolbar, true, "");
-        toolbar.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                scrollView.smoothScrollTo(0, 0);
+        toolbar.setOnClickListener(view1 -> {
+            scrollView.smoothScrollTo(0, 0);
 //                ObjectAnimator anim = ObjectAnimator.ofInt(webView, "scrollY", webView.getScrollY(), 0);
 //                anim.setDuration(500).start();
-            }
         });
 
         webView = view.findViewById(R.id.webview);
         initWebClient();
 
         scrollView = view.findViewById(R.id.scrollView);
-        scrollView.setOnScrollChangeListener(new NestedScrollView.OnScrollChangeListener() {
-            @Override
-            public void onScrollChange(NestedScrollView v, int scrollX, int scrollY, int oldScrollX, int oldScrollY) {
-                onHideLoading();
-            }
-        });
+        scrollView.setOnScrollChangeListener((NestedScrollView.OnScrollChangeListener) (v, scrollX, scrollY, oldScrollX, oldScrollY) -> onHideLoading());
 
         progressBar = view.findViewById(R.id.pb_progress);
         int color = SettingUtil.getInstance().getColor();
@@ -170,17 +172,9 @@ public class NewsContentFragment extends BaseFragment<INewsContent.Presenter> im
 
         swipeRefreshLayout = view.findViewById(R.id.refresh_layout);
         swipeRefreshLayout.setColorSchemeColors(SettingUtil.getInstance().getColor());
-        swipeRefreshLayout.setOnRefreshListener(new SwipeRefreshLayout.OnRefreshListener() {
-            @Override
-            public void onRefresh() {
-                swipeRefreshLayout.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        swipeRefreshLayout.setRefreshing(true);
-                    }
-                });
-                presenter.doLoadData(bean);
-            }
+        swipeRefreshLayout.setOnRefreshListener(() -> {
+            swipeRefreshLayout.post(() -> swipeRefreshLayout.setRefreshing(true));
+            presenter.doLoadData(bean);
         });
 
         if (isHasImage) {
@@ -191,7 +185,7 @@ public class NewsContentFragment extends BaseFragment<INewsContent.Presenter> im
         setHasOptionsMenu(true);
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
+    @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface", "JavascriptInterface"})
     private void initWebClient() {
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -218,19 +212,18 @@ public class NewsContentFragment extends BaseFragment<INewsContent.Presenter> im
             @Override
             public void onPageFinished(WebView view, String url) {
                 onHideLoading();
+                // 注入 js 函数监听
+                webView.loadUrl(Constant.JS_INJECT_IMG);
                 super.onPageFinished(view, url);
             }
         });
 
-        webView.setOnKeyListener(new View.OnKeyListener() {
-            @Override
-            public boolean onKey(View view, int i, KeyEvent keyEvent) {
-                if ((keyEvent.getKeyCode() == KeyEvent.KEYCODE_BACK) && webView.canGoBack()) {
-                    webView.goBack();
-                    return true;
-                }
-                return false;
+        webView.setOnKeyListener((view, i, keyEvent) -> {
+            if ((keyEvent.getKeyCode() == KeyEvent.KEYCODE_BACK) && webView.canGoBack()) {
+                webView.goBack();
+                return true;
             }
+            return false;
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
@@ -244,6 +237,7 @@ public class NewsContentFragment extends BaseFragment<INewsContent.Presenter> im
                 }
             }
         });
+        webView.addJavascriptInterface(presenter, "imageListener");
     }
 
     @Override
@@ -284,12 +278,7 @@ public class NewsContentFragment extends BaseFragment<INewsContent.Presenter> im
     @Override
     public void onHideLoading() {
         progressBar.hide();
-        swipeRefreshLayout.post(new Runnable() {
-            @Override
-            public void run() {
-                swipeRefreshLayout.setRefreshing(false);
-            }
-        });
+        swipeRefreshLayout.post(() -> swipeRefreshLayout.setRefreshing(false));
     }
 
     @Override

@@ -10,8 +10,8 @@ import android.widget.TextView;
 
 import com.jaygoo.widget.RangeSeekBar;
 import com.meiji.toutiao.R;
-import com.meiji.toutiao.RxBus;
 import com.meiji.toutiao.module.base.BaseListFragment;
+import com.meiji.toutiao.util.RxBus;
 import com.meiji.toutiao.util.SettingUtil;
 
 import java.text.DecimalFormat;
@@ -52,6 +52,16 @@ public class TextSizeFragment extends Fragment {
                         currentSize = size;
                     }
                 }
+            }
+
+            @Override
+            public void onStartTrackingTouch(RangeSeekBar view, boolean isLeft) {
+
+            }
+
+            @Override
+            public void onStopTrackingTouch(RangeSeekBar view, boolean isLeft) {
+
             }
         });
     }

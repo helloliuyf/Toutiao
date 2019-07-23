@@ -1,17 +1,14 @@
 package com.meiji.toutiao.module.news.comment;
 
 import com.meiji.toutiao.ErrorAction;
-import com.meiji.toutiao.RetrofitFactory;
 import com.meiji.toutiao.api.IMobileNewsApi;
 import com.meiji.toutiao.bean.news.NewsCommentBean;
+import com.meiji.toutiao.util.RetrofitFactory;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.annotations.NonNull;
-import io.reactivex.functions.Consumer;
-import io.reactivex.functions.Function;
 import io.reactivex.schedulers.Schedulers;
 
 /**
@@ -48,33 +45,24 @@ public class NewsCommentPresenter implements INewsComment.Presenter {
         RetrofitFactory.getRetrofit().create(IMobileNewsApi.class)
                 .getNewsComment(groupId, offset)
                 .subscribeOn(Schedulers.io())
-                .map(new Function<NewsCommentBean, List<NewsCommentBean.DataBean.CommentBean>>() {
-                    @Override
-                    public List<NewsCommentBean.DataBean.CommentBean> apply(@NonNull NewsCommentBean newsCommentBean) throws Exception {
-                        List<NewsCommentBean.DataBean.CommentBean> data = new ArrayList<>();
-                        for (NewsCommentBean.DataBean bean : newsCommentBean.getData()) {
-                            data.add(bean.getComment());
-                        }
-                        return data;
+                .map(newsCommentBean -> {
+                    List<NewsCommentBean.DataBean.CommentBean> data = new ArrayList<>();
+                    for (NewsCommentBean.DataBean bean : newsCommentBean.getData()) {
+                        data.add(bean.getComment());
                     }
+                    return data;
                 })
-                .compose(view.<List<NewsCommentBean.DataBean.CommentBean>>bindToLife())
                 .observeOn(AndroidSchedulers.mainThread())
-                .subscribe(new Consumer<List<NewsCommentBean.DataBean.CommentBean>>() {
-                    @Override
-                    public void accept(@NonNull List<NewsCommentBean.DataBean.CommentBean> list) throws Exception {
-                        if (null != list && list.size() > 0) {
-                            doSetAdapter(list);
-                        } else {
-                            doShowNoMore();
-                        }
+                .as(view.bindAutoDispose())
+                .subscribe(list -> {
+                    if (null != list && list.size() > 0) {
+                        doSetAdapter(list);
+                    } else {
+                        doShowNoMore();
                     }
-                }, new Consumer<Throwable>() {
-                    @Override
-                    public void accept(@NonNull Throwable throwable) throws Exception {
-                        doShowNetError();
-                        ErrorAction.print(throwable);
-                    }
+                }, throwable -> {
+                    doShowNetError();
+                    ErrorAction.print(throwable);
                 });
     }
 

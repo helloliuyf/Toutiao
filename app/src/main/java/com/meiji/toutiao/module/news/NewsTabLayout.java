@@ -14,15 +14,14 @@ import android.widget.LinearLayout;
 
 import com.meiji.toutiao.Constant;
 import com.meiji.toutiao.R;
-import com.meiji.toutiao.RxBus;
 import com.meiji.toutiao.adapter.base.BasePagerAdapter;
 import com.meiji.toutiao.bean.news.NewsChannelBean;
 import com.meiji.toutiao.database.dao.NewsChannelDao;
 import com.meiji.toutiao.module.base.BaseListFragment;
-import com.meiji.toutiao.module.joke.content.JokeContentView;
 import com.meiji.toutiao.module.news.article.NewsArticleView;
 import com.meiji.toutiao.module.news.channel.NewsChannelActivity;
 import com.meiji.toutiao.module.wenda.article.WendaArticleView;
+import com.meiji.toutiao.util.RxBus;
 import com.meiji.toutiao.util.SettingUtil;
 
 import java.util.ArrayList;
@@ -31,7 +30,6 @@ import java.util.List;
 import java.util.Map;
 
 import io.reactivex.Observable;
-import io.reactivex.functions.Consumer;
 
 /**
  * Created by Meiji on 2016/12/12.
@@ -79,12 +77,7 @@ public class NewsTabLayout extends Fragment {
         tab_layout.setupWithViewPager(viewPager);
         tab_layout.setTabMode(TabLayout.MODE_SCROLLABLE);
         ImageView add_channel_iv = view.findViewById(R.id.add_channel_iv);
-        add_channel_iv.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                startActivity(new Intent(getActivity(), NewsChannelActivity.class));
-            }
-        });
+        add_channel_iv.setOnClickListener(v -> startActivity(new Intent(getActivity(), NewsChannelActivity.class)));
         linearLayout = view.findViewById(R.id.header_layout);
         linearLayout.setBackgroundColor(SettingUtil.getInstance().getColor());
     }
@@ -96,13 +89,10 @@ public class NewsTabLayout extends Fragment {
         viewPager.setOffscreenPageLimit(15);
 
         observable = RxBus.getInstance().register(NewsTabLayout.TAG);
-        observable.subscribe(new Consumer<Boolean>() {
-            @Override
-            public void accept(Boolean isRefresh) throws Exception {
-                if (isRefresh) {
-                    initTabs();
-                    adapter.recreateItems(fragmentList, titleList);
-                }
+        observable.subscribe(isRefresh -> {
+            if (isRefresh) {
+                initTabs();
+                adapter.recreateItems(fragmentList, titleList);
             }
         });
     }
@@ -122,15 +112,6 @@ public class NewsTabLayout extends Fragment {
             String channelId = bean.getChannelId();
 
             switch (channelId) {
-                case "essay_joke":
-                    if (map.containsKey(channelId)) {
-                        fragmentList.add(map.get(channelId));
-                    } else {
-                        fragment = JokeContentView.newInstance();
-                        fragmentList.add(fragment);
-                    }
-
-                    break;
                 case "question_and_answer":
                     if (map.containsKey(channelId)) {
                         fragmentList.add(map.get(channelId));

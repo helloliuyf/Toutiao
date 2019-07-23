@@ -1,7 +1,9 @@
 package com.meiji.toutiao.module.base;
 
 import android.app.ActivityManager;
+import android.arch.lifecycle.Lifecycle;
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
@@ -9,6 +11,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
+import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.MenuItem;
 
@@ -19,16 +22,19 @@ import com.meiji.toutiao.util.SettingUtil;
 import com.r0adkll.slidr.Slidr;
 import com.r0adkll.slidr.model.SlidrConfig;
 import com.r0adkll.slidr.model.SlidrInterface;
-import com.trello.rxlifecycle2.components.support.RxAppCompatActivity;
+import com.uber.autodispose.AutoDispose;
+import com.uber.autodispose.AutoDisposeConverter;
+import com.uber.autodispose.android.lifecycle.AndroidLifecycleScopeProvider;
 
 /**
  * Created by Meiji on 2016/12/12.
  */
 
-public abstract class BaseActivity extends RxAppCompatActivity {
+public abstract class BaseActivity extends AppCompatActivity {
 
     private static final String TAG = "BaseActivity";
     protected SlidrInterface slidrInterface;
+    protected Context mContext;
     private int iconType = -1;
 
     /**
@@ -57,6 +63,7 @@ public abstract class BaseActivity extends RxAppCompatActivity {
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         this.iconType = SettingUtil.getInstance().getCustomIconValue();
+        this.mContext = this;
         initSlidable();
     }
 
@@ -91,17 +98,6 @@ public abstract class BaseActivity extends RxAppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
-//    @Override
-//    protected void onDestroy() {
-//        for (Call call : InitApp.getOkHttpClient().dispatcher().queuedCalls()) {
-//            call.cancel();
-//        }
-//        for (Call call : InitApp.getOkHttpClient().dispatcher().runningCalls()) {
-//            call.cancel();
-//        }
-//        super.onDestroy();
-//    }
-
     @Override
     public void onBackPressed() {
         // Fragment 逐个出栈
@@ -117,27 +113,29 @@ public abstract class BaseActivity extends RxAppCompatActivity {
     protected void onStop() {
 
         if (iconType != SettingUtil.getInstance().getCustomIconValue()) {
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
+            new Thread(() -> {
 
-                    String act = ".SplashActivity_";
+                String act = ".SplashActivity_";
 
-                    for (String s : Constant.ICONS_TYPE) {
-                        getPackageManager().setComponentEnabledSetting(new ComponentName(BaseActivity.this, getPackageName() + act + s),
-                                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                                PackageManager.DONT_KILL_APP);
-                    }
-
-                    act += Constant.ICONS_TYPE[SettingUtil.getInstance().getCustomIconValue()];
-
-                    getPackageManager().setComponentEnabledSetting(new ComponentName(BaseActivity.this, getPackageName() + act),
-                            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                for (String s : Constant.ICONS_TYPE) {
+                    getPackageManager().setComponentEnabledSetting(new ComponentName(BaseActivity.this, getPackageName() + act + s),
+                            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                             PackageManager.DONT_KILL_APP);
                 }
+
+                act += Constant.ICONS_TYPE[SettingUtil.getInstance().getCustomIconValue()];
+
+                getPackageManager().setComponentEnabledSetting(new ComponentName(BaseActivity.this, getPackageName() + act),
+                        PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                        PackageManager.DONT_KILL_APP);
             }).start();
         }
 
         super.onStop();
+    }
+
+    public <X> AutoDisposeConverter<X> bindAutoDispose() {
+        return AutoDispose.autoDisposable(AndroidLifecycleScopeProvider
+                .from(this, Lifecycle.Event.ON_DESTROY));
     }
 }

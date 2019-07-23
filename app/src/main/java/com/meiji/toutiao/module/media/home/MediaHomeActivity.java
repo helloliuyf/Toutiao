@@ -15,7 +15,6 @@ import android.text.TextUtils;
 import com.meiji.toutiao.ErrorAction;
 import com.meiji.toutiao.InitApp;
 import com.meiji.toutiao.R;
-import com.meiji.toutiao.RetrofitFactory;
 import com.meiji.toutiao.adapter.base.BasePagerAdapter;
 import com.meiji.toutiao.api.IMobileMediaApi;
 import com.meiji.toutiao.bean.media.MediaProfileBean;
@@ -23,14 +22,13 @@ import com.meiji.toutiao.module.base.BaseActivity;
 import com.meiji.toutiao.module.media.home.tab.MediaArticleFragment;
 import com.meiji.toutiao.module.media.home.tab.MediaVideoFragment;
 import com.meiji.toutiao.module.media.home.tab.MediaWendaFragment;
+import com.meiji.toutiao.util.RetrofitFactory;
 import com.meiji.toutiao.util.SettingUtil;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.annotations.NonNull;
-import io.reactivex.functions.Consumer;
 import io.reactivex.schedulers.Schedulers;
 
 /**
@@ -61,16 +59,16 @@ public class MediaHomeActivity extends BaseActivity {
     }
 
     private void initView() {
-        toolbar = (Toolbar) findViewById(R.id.toolbar);
+        toolbar = findViewById(R.id.toolbar);
         toolbar.setBackgroundColor(SettingUtil.getInstance().getColor());
 
-        tabLayout = (TabLayout) findViewById(R.id.tab_layout);
-        viewPager = (ViewPager) findViewById(R.id.view_pager);
+        tabLayout = findViewById(R.id.tab_layout);
+        viewPager = findViewById(R.id.view_pager);
         tabLayout.setBackgroundColor(SettingUtil.getInstance().getColor());
         tabLayout.setupWithViewPager(viewPager);
         tabLayout.setTabMode(TabLayout.MODE_SCROLLABLE);
 
-        progressBar = (ContentLoadingProgressBar) findViewById(R.id.pb_progress);
+        progressBar = findViewById(R.id.pb_progress);
         int color = SettingUtil.getInstance().getColor();
         progressBar.getIndeterminateDrawable().setColorFilter(color, PorterDuff.Mode.MULTIPLY);
         progressBar.show();
@@ -113,25 +111,19 @@ public class MediaHomeActivity extends BaseActivity {
                 .getMediaProfile(mediaId)
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
-                .compose(this.<MediaProfileBean>bindToLifecycle())
-                .subscribe(new Consumer<MediaProfileBean>() {
-                    @Override
-                    public void accept(@NonNull MediaProfileBean bean) throws Exception {
-                        String name = bean.getData().getName();
-                        initToolBar(toolbar, true, name);
-                        List<MediaProfileBean.DataBean.TopTabBean> topTab = bean.getData().getTop_tab();
-                        if (null != topTab && topTab.size() < 0) {
-                            onError();
-                            return;
-                        }
-                        initTabLayout(bean.getData());
-                    }
-                }, new Consumer<Throwable>() {
-                    @Override
-                    public void accept(@NonNull Throwable throwable) throws Exception {
+                .as(this.bindAutoDispose())
+                .subscribe(bean -> {
+                    String name = bean.getData().getName();
+                    initToolBar(toolbar, true, name);
+                    List<MediaProfileBean.DataBean.TopTabBean> topTab = bean.getData().getTop_tab();
+                    if (null != topTab && topTab.size() < 0) {
                         onError();
-                        ErrorAction.print(throwable);
+                        return;
                     }
+                    initTabLayout(bean.getData());
+                }, throwable -> {
+                    onError();
+                    ErrorAction.print(throwable);
                 });
     }
 

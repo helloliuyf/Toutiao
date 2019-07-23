@@ -4,9 +4,9 @@ import android.os.Bundle;
 import android.view.View;
 
 import com.meiji.toutiao.Register;
-import com.meiji.toutiao.adapter.DiffCallback;
 import com.meiji.toutiao.bean.LoadingBean;
 import com.meiji.toutiao.module.base.BaseListFragment;
+import com.meiji.toutiao.util.DiffCallback;
 import com.meiji.toutiao.util.OnLoadMoreListener;
 
 import java.util.List;
@@ -69,10 +69,16 @@ public class NewsArticleView extends BaseListFragment<INewsArticle.Presenter> im
     public void onSetAdapter(final List<?> list) {
         Items newItems = new Items(list);
         newItems.add(new LoadingBean());
-        DiffCallback.notifyDataSetChanged(oldItems, newItems, DiffCallback.MUlTI_NEWS, adapter);
+        DiffCallback.create(oldItems, newItems, adapter);
         oldItems.clear();
         oldItems.addAll(newItems);
         canLoadMore = true;
+        /**
+         * https://medium.com/@hanru.yeh/recyclerview-and-appbarlayout-behavior-changed-in-v26-0-x-d9eb4de78fc0
+         * support libraries v26 增加了 RV 惯性滑动，当 root layout 使用了 AppBarLayout Behavior 就会自动生效
+         * 因此需要手动停止滑动
+         */
+        recyclerView.stopScroll();
     }
 
     @Override
